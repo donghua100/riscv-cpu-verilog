@@ -51,6 +51,11 @@
 `define		BR_LTU		3'd5
 `define		BR_GEU		3'd6
 
+// Forward
+`define		F_XXX		2'd0
+`define		F_alu		2'd1
+`define		F_mem		2'd2
+
 
 `define		ADDI		32'b???????_?????_000_?????_0010011
 `define		NOP			32'b0000000_00000_000_00000_0000000

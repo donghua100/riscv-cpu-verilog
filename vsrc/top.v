@@ -29,12 +29,17 @@ module top(
 	wire					taken;
 	wire	[`XLEN-1:0]		Imm, immI, immS, immB, immU, immJ;
 	wire	[`XLEN-1:0]		A, B, Alu_out;
+	wire	[`XLEN-1:0]		l_rdata1,l_rdata2;
+	wire	[1:0]			FwdA_sel,FwdB_sel;
+	wire					stall;
 	
 	// IF_ID
 	reg		[31:0]			if_id_inst;
 	reg		[`XLEN -1:0]	if_id_pc;
 
 	// ID_EX
+	reg		[4:0]			id_ex_rs1;
+	reg		[4:0]			id_ex_rs2;
 	reg		[`XLEN-1:0]		id_ex_rdata1;
 	reg		[`XLEN-1:0]		id_ex_rdata2;
 	reg		[`XLEN-1:0]		id_ex_Imm;
@@ -93,6 +98,12 @@ module top(
 		.rs2(rs2),
 		.rd(rd));
 
+	Hazard hzd(.rs1(rs1),
+				.rs2(rs2),
+				.id_ex_rd(id_ex_rd),
+				.id_ex_Mren(id_ex_Mren),
+				.stall(stall));
+
 	RegFile regfile(.clk(clk),
 		.wen(mem_wb_Rwen),
 		.rs1(rs1),
@@ -126,6 +137,25 @@ module top(
 				(Imm_sel == `IMM_J ? immJ:0)))));
 	always @(posedge clk) begin
 		if (rst) begin
+			id_ex_rs1		<= 0;
+			id_ex_rs2		<= 0;
+			id_ex_rdata1	<= 0;
+			id_ex_rdata2	<= 0;
+			id_ex_Imm		<= 0;
+			id_ex_pc		<= 0;
+			id_ex_rd		<= 0;
+			id_ex_A_sel		<= `A_XXX;
+			id_ex_B_sel		<= `B_XXX;
+			id_ex_Alu_op	<= `ALU_XXX;
+			id_ex_Br_sel	<= `BR_XXX;
+			id_ex_Mren		<= `MemXX;
+			id_ex_Mwen		<= `MemXXX;
+			id_ex_Rwen		<= `RegXXX;
+			id_ex_Wb_sel	<= `WB_XXX;
+		end
+		else if (stall) begin
+			id_ex_rs1		<= 0;
+			id_ex_rs2		<= 0;
 			id_ex_rdata1	<= 0;
 			id_ex_rdata2	<= 0;
 			id_ex_Imm		<= 0;
@@ -141,6 +171,8 @@ module top(
 			id_ex_Wb_sel	<= `WB_XXX;
 		end
 		else begin
+			id_ex_rs1		<= rs1;
+			id_ex_rs2		<= rs2;
 			id_ex_rdata1	<= rdata1;
 			id_ex_rdata2	<= rdata2;
 			id_ex_Imm		<= Imm;
@@ -157,10 +189,14 @@ module top(
 		end
 	end
 
+	assign l_rdata1 = (FwdA_sel == `F_alu ? ex_mem_Alu_out:
+					  (FwdA_sel	== `F_mem ? wdata : id_ex_rdata1));
+	assign l_rdata2 = (FwdB_sel == `F_alu ? ex_mem_Alu_out:
+					  (FwdB_sel == `F_mem ? wdata : id_ex_rdata2));
 
-	assign A = (id_ex_A_sel == `A_SR1 ? id_ex_rdata1:
+	assign A = (id_ex_A_sel == `A_SR1 ? l_rdata1:
 				(id_ex_A_sel == `A_PC ? id_ex_pc : 0));
-	assign B = (id_ex_B_sel == `B_SR1 ? id_ex_rdata2:
+	assign B = (id_ex_B_sel == `B_SR1 ? l_rdata2:
 				(id_ex_B_sel == `B_IMM ? id_ex_Imm:0));
 	ALU alu(.Alu_op(id_ex_Alu_op),
 		.A(A),
@@ -236,4 +272,12 @@ module top(
 
 	assign wdata = (mem_wb_Wb_sel == `WB_ALU ? mem_wb_Alu_out:
 				(mem_wb_Wb_sel == `WB_MEM ? mem_wb_mdata :0));
+	Forward fwd(.id_ex_rs1(id_ex_rs1),
+				.id_ex_rs2(id_ex_rs2),
+				.ex_mem_Rwen(ex_mem_Rwen),
+				.ex_mem_rd(ex_mem_rd),
+				.mem_wb_Rwen(mem_wb_Rwen),
+				.mem_wb_rd(mem_wb_rd),
+				.FwdA_sel(FwdA_sel),
+				.FwdB_sel(FwdB_sel));
 endmodule
